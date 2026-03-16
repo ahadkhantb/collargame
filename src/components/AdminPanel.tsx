@@ -474,9 +474,21 @@ export const AdminPanel: React.FC = () => {
               <div className="flex flex-col items-end">
                 <p className="text-[10px] text-white/20 uppercase font-bold">{new Date(tx.createdAt).toLocaleString()}</p>
                 {tx.transactionId && (
-                  <div className="bg-black/40 px-3 py-1 rounded-lg border border-white/5 mt-1">
-                    <span className="text-[8px] text-white/20 uppercase font-bold mr-2">TXID</span>
-                    <span className="text-[10px] font-mono text-white/60">{tx.transactionId}</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="bg-black/40 px-3 py-1 rounded-lg border border-white/5 flex items-center gap-2">
+                      <span className="text-[8px] text-white/20 uppercase font-bold">TXID</span>
+                      <span className="text-[10px] font-mono text-white/60">{tx.transactionId}</span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(tx.transactionId!);
+                        // Optional: Add a temporary toast or tooltip
+                      }}
+                      className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg border border-white/5 text-white/40 hover:text-white/60 transition-colors"
+                      title="Copy Transaction ID"
+                    >
+                      <History size={12} />
+                    </button>
                   </div>
                 )}
               </div>

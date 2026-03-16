@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, doc, updateDoc, increment, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Game, Bet, ColorSelection, NumberSelection, BetSelection } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clock, History, Trophy, HelpCircle, ChevronDown, ChevronUp, Volume2, VolumeX } from 'lucide-react';
+import { Clock, History, Trophy, HelpCircle, ChevronDown, ChevronUp, Volume2, VolumeX, Search, X as CloseIcon } from 'lucide-react';
 import { gameService } from '../gameService';
 import { GameRules } from './GameRules';
 import { soundService } from '../soundService';
@@ -24,6 +24,19 @@ export const GameBoard: React.FC = () => {
   const [userBets, setUserBets] = useState<Bet[]>([]);
   const [betHistory, setBetHistory] = useState<Bet[]>([]);
   const [lastSuccessSelection, setLastSuccessSelection] = useState<BetSelection | null>(null);
+  const [lastResult, setLastResult] = useState<Game | null>(null);
+  const [showResultAnimation, setShowResultAnimation] = useState(false);
+  
+  const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
+  const [periodSearch, setPeriodSearch] = useState('');
+
+  const filteredBetHistory = useMemo(() => {
+    return betHistory.filter(bet => {
+      const matchesStatus = statusFilter === 'all' || bet.status === statusFilter;
+      const matchesPeriod = periodSearch === '' || bet.gameId.toLowerCase().includes(periodSearch.toLowerCase());
+      return matchesStatus && matchesPeriod;
+    });
+  }, [betHistory, statusFilter, periodSearch]);
 
   const toggleSound = () => {
     const newState = soundService.toggle();
@@ -67,7 +80,12 @@ export const GameBoard: React.FC = () => {
       // Play sound if a new result just came in
       setHistory(prevHistory => {
         if (prevHistory.length > 0 && completed.length > 0 && completed[0].id !== prevHistory[0].id) {
-          soundService.play('draw'); // Neutral sound for new result
+          soundService.play('draw');
+          setLastResult(completed[0]);
+          setShowResultAnimation(true);
+          setTimeout(() => setShowResultAnimation(false), 10000); // Show for 10 seconds
+        } else if (prevHistory.length === 0 && completed.length > 0) {
+          setLastResult(completed[0]);
         }
         return completed;
       });
@@ -212,6 +230,42 @@ export const GameBoard: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {/* Last Result Hero */}
+      <AnimatePresence>
+        {showResultAnimation && lastResult && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: -20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -20 }}
+            className="glass rounded-[40px] p-8 border border-[#F27D26]/20 bg-gradient-to-br from-[#F27D26]/10 to-transparent relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+              <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#F27D26]/10 blur-[80px] rounded-full" />
+            </div>
+            
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <p className="text-[10px] uppercase font-black tracking-[0.4em] text-[#F27D26] mb-4">Period {lastResult.periodId} Result</p>
+              <div className="flex items-center gap-8">
+                <motion.div 
+                  initial={{ rotate: -10, scale: 0.8 }}
+                  animate={{ rotate: 0, scale: 1 }}
+                  className={`w-24 h-24 rounded-full flex items-center justify-center text-5xl font-serif italic shadow-2xl ${
+                    lastResult.resultColor === 'green' ? 'bg-emerald-500 text-black' : 
+                    lastResult.resultColor === 'red' ? 'bg-rose-500 text-black' : 'bg-violet-500 text-white'
+                  }`}
+                >
+                  {lastResult.resultNumber}
+                </motion.div>
+                <div className="text-left">
+                  <p className="text-3xl font-serif italic mb-1 capitalize">{lastResult.resultColor}</p>
+                  <p className="text-white/40 text-xs uppercase tracking-widest font-bold">Winning Combination</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Timer Section */}
       <div className="glass rounded-3xl p-8 flex flex-col items-center justify-center relative overflow-hidden group">
         <div className="absolute top-0 left-0 w-full h-1 bg-white/5">
@@ -324,21 +378,60 @@ export const GameBoard: React.FC = () => {
 
       {/* My Bets Section */}
       <div className="glass rounded-3xl p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2 text-white/60">
-            <Trophy size={18} className="text-[#F27D26]" />
-            <h3 className="text-lg font-serif italic">My Betting History</h3>
+        <div className="flex flex-col gap-6 mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-white/60">
+              <Trophy size={18} className="text-[#F27D26]" />
+              <h3 className="text-lg font-serif italic">My Betting History</h3>
+            </div>
+            <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Last 20 Bets</span>
           </div>
-          <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Last 20 Bets</span>
+
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex gap-2 p-1 bg-black/40 rounded-xl border border-white/5 w-fit">
+              {(['all', 'won', 'lost', 'pending'] as const).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                    statusFilter === status 
+                      ? 'bg-[#F27D26] text-black shadow-lg shadow-[#F27D26]/20' 
+                      : 'text-white/40 hover:text-white/60'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+              <input 
+                type="text"
+                placeholder="Search Period ID..."
+                value={periodSearch}
+                onChange={(e) => setPeriodSearch(e.target.value)}
+                className="w-full bg-black/40 border border-white/5 rounded-xl py-2 pl-10 pr-10 text-xs focus:outline-none focus:border-[#F27D26]/40 transition-all placeholder:text-white/10"
+              />
+              {periodSearch && (
+                <button 
+                  onClick={() => setPeriodSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/40"
+                >
+                  <CloseIcon size={14} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
         
-        {betHistory.length === 0 ? (
+        {filteredBetHistory.length === 0 ? (
           <div className="py-12 text-center text-white/20 italic font-serif">
-            No bets placed yet.
+            {betHistory.length === 0 ? 'No bets placed yet.' : 'No matches found for current filters.'}
           </div>
         ) : (
           <div className="space-y-3">
-            {betHistory.map(bet => (
+            {filteredBetHistory.map(bet => (
               <div key={bet.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all">
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
@@ -418,9 +511,22 @@ export const GameBoard: React.FC = () => {
 
       {/* History Section */}
       <div className="glass rounded-3xl p-8">
-        <div className="flex items-center gap-2 mb-6 text-white/60">
-          <History size={18} />
-          <h3 className="text-lg font-serif italic">Recent Results</h3>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2 text-white/60">
+            <History size={18} />
+            <h3 className="text-lg font-serif italic">Recent Results</h3>
+          </div>
+          <div className="flex gap-1">
+            {history.slice(0, 10).reverse().map((game, i) => (
+              <div 
+                key={i}
+                className={`w-2 h-2 rounded-full ${
+                  game.resultColor === 'green' ? 'bg-emerald-500' : 
+                  game.resultColor === 'red' ? 'bg-rose-500' : 'bg-violet-500'
+                }`}
+              />
+            ))}
+          </div>
         </div>
         
         <div className="space-y-4">

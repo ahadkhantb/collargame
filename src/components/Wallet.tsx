@@ -3,7 +3,7 @@ import { addDoc, collection, doc, updateDoc, increment, query, where, orderBy, l
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Transaction } from '../types';
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, CreditCard, History, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CheckCircle2, CreditCard, History, Clock, CheckCircle, XCircle, Copy, Info, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { handleFirestoreError, OperationType } from '../firestoreError';
@@ -19,6 +19,9 @@ export const Wallet: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [history, setHistory] = useState<Transaction[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'deposit' | 'withdraw'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [txSearch, setTxSearch] = useState('');
   const [paymentNumbers, setPaymentNumbers] = useState({
     bkash: '017XXXXXXXX',
     nagad: '018XXXXXXXX',
@@ -46,7 +49,7 @@ export const Wallet: React.FC = () => {
       collection(db, 'transactions'),
       where('userId', '==', profile.uid),
       orderBy('createdAt', 'desc'),
-      limit(20)
+      limit(50)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -57,6 +60,13 @@ export const Wallet: React.FC = () => {
 
     return () => unsubscribe();
   }, [profile]);
+
+  const filteredHistory = history.filter(tx => {
+    const matchesType = historyFilter === 'all' || tx.type === historyFilter;
+    const matchesStatus = statusFilter === 'all' || tx.status === statusFilter;
+    const matchesSearch = !txSearch || (tx.transactionId?.toLowerCase().includes(txSearch.toLowerCase()) || tx.accountNumber.includes(txSearch));
+    return matchesType && matchesStatus && matchesSearch;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,16 +87,19 @@ export const Wallet: React.FC = () => {
     setError('');
     
     try {
-      const transaction: Omit<Transaction, 'id'> = {
+      const transaction: any = {
         userId: profile.uid,
         type: activeTab,
         amount: amountNum,
         method,
         accountNumber,
-        transactionId: activeTab === 'deposit' ? txId : undefined,
         status: 'pending',
         createdAt: new Date().toISOString(),
       };
+
+      if (activeTab === 'deposit') {
+        transaction.transactionId = txId;
+      }
 
       const batch = writeBatch(db);
       const txRef = doc(collection(db, 'transactions'));
@@ -117,11 +130,18 @@ export const Wallet: React.FC = () => {
     }
   };
 
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    // Optionally show a toast or temporary state
+  };
+
   const methods = [
-    { id: 'bkash', name: 'bKash', color: '#D12053', number: paymentNumbers.bkash },
-    { id: 'nagad', name: 'Nagad', color: '#F7941D', number: paymentNumbers.nagad },
-    { id: 'rocket', name: 'Rocket', color: '#8C3494', number: paymentNumbers.rocket },
+    { id: 'bkash', name: 'bKash', color: '#D12053', number: paymentNumbers.bkash, logo: 'https://picsum.photos/seed/bkash/40/40' },
+    { id: 'nagad', name: 'Nagad', color: '#F7941D', number: paymentNumbers.nagad, logo: 'https://picsum.photos/seed/nagad/40/40' },
+    { id: 'rocket', name: 'Rocket', color: '#8C3494', number: paymentNumbers.rocket, logo: 'https://picsum.photos/seed/rocket/40/40' },
   ] as const;
+
+  const currentMethod = methods.find(m => m.id === method);
 
   return (
     <div className="max-w-md mx-auto glass rounded-3xl overflow-hidden">
@@ -174,79 +194,150 @@ export const Wallet: React.FC = () => {
               className="space-y-6"
             >
               {activeTab === 'deposit' && (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-                  <p className="text-[10px] uppercase tracking-widest text-emerald-500 font-bold mb-2">Payment Instructions</p>
-                  <p className="text-sm text-white/80">
-                    Send Money to the number below and enter the Transaction ID.
-                  </p>
-                  <div className="mt-3 flex items-center justify-between bg-black/40 p-3 rounded-xl border border-white/5">
-                    <span className="font-mono text-lg">{methods.find(m => m.id === method)?.number}</span>
-                    <span className="text-[10px] uppercase font-bold text-white/40">{method}</span>
+                <div className="space-y-4">
+                  <div className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-3xl">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-6 h-6 bg-emerald-500 text-black rounded-full flex items-center justify-center text-[10px] font-black">1</div>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-500 font-black">Send Money</p>
+                    </div>
+                    
+                    <p className="text-sm text-white/80 mb-4 leading-relaxed">
+                      Please send the deposit amount to our <span className="font-bold text-white">{currentMethod?.name}</span> Personal number using the <span className="italic">"Send Money"</span> option.
+                    </p>
+
+                    <div className="bg-black/60 p-4 rounded-2xl border border-white/5 flex items-center justify-between group">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] uppercase tracking-widest text-white/30 font-bold mb-1">Our {currentMethod?.name} Number</span>
+                        <span className="font-mono text-xl text-white tracking-wider">{currentMethod?.number}</span>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => handleCopy(currentMethod?.number || '')}
+                        className="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all active:scale-95 text-white/60 hover:text-white"
+                        title="Copy Number"
+                      >
+                        <Copy size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-5 bg-amber-500/10 border border-amber-500/20 rounded-3xl">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-amber-500 text-black rounded-full flex items-center justify-center text-[10px] font-black">2</div>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-amber-500 font-black">Submit Details</p>
+                    </div>
+                    <p className="text-xs text-white/60">
+                      After successful payment, fill in the form below with your number and the Transaction ID.
+                    </p>
                   </div>
                 </div>
               )}
 
-              <div className="space-y-4">
+              {activeTab === 'withdraw' && (
+                <div className="p-5 bg-blue-500/10 border border-blue-500/20 rounded-3xl">
+                  <div className="flex items-start gap-3">
+                    <Info size={18} className="text-blue-400 mt-0.5 shrink-0" />
+                    <div className="space-y-1">
+                      <p className="text-xs font-bold text-blue-400 uppercase tracking-wider">Withdrawal Info</p>
+                      <p className="text-[11px] text-white/60 leading-relaxed">
+                        Withdrawals are processed within 30-60 minutes. Minimum withdrawal is ৳500. Ensure your number is correct.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-5">
                 <div>
-                  <label className="text-[10px] uppercase tracking-widest text-white/40 font-bold ml-2">Payment Method</label>
-                  <div className="grid grid-cols-3 gap-3 mt-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black ml-2 mb-2 block">Select Method</label>
+                  <div className="grid grid-cols-3 gap-3">
                     {methods.map((m) => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => setMethod(m.id)}
-                        className={`py-3 rounded-xl border transition-all flex flex-col items-center gap-1 ${
+                        className={`relative py-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 overflow-hidden ${
                           method === m.id 
-                            ? 'border-[#F27D26] bg-[#F27D26]/10' 
-                            : 'border-white/10 bg-white/5 hover:bg-white/10'
+                            ? 'border-[#F27D26] bg-[#F27D26]/5' 
+                            : 'border-white/5 bg-white/5 hover:bg-white/10'
                         }`}
                       >
-                        <span className="text-xs font-bold">{m.name}</span>
+                        {method === m.id && (
+                          <motion.div 
+                            layoutId="activeMethod"
+                            className="absolute top-2 right-2"
+                          >
+                            <CheckCircle2 size={14} className="text-[#F27D26]" />
+                          </motion.div>
+                        )}
+                        <div 
+                          className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px]"
+                          style={{ backgroundColor: m.color, color: 'white' }}
+                        >
+                          {m.name[0]}
+                        </div>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${method === m.id ? 'text-white' : 'text-white/40'}`}>
+                          {m.name}
+                        </span>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10px] uppercase tracking-widest text-white/40 font-bold ml-2">Amount (৳)</label>
-                  <input
-                    type="number"
-                    required
-                    min="100"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Min ৳100"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:border-[#F27D26] transition-colors"
-                  />
-                </div>
+                <div className="grid grid-cols-1 gap-5">
+                  <div className="relative">
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black ml-2 mb-2 block">Amount (৳)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        required
+                        min={activeTab === 'deposit' ? "100" : "500"}
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder={activeTab === 'deposit' ? "Min ৳100" : "Min ৳500"}
+                        className="w-full bg-black/40 border-2 border-white/5 rounded-2xl px-5 py-4 focus:outline-none focus:border-[#F27D26]/40 transition-all text-lg font-mono placeholder:text-white/10"
+                      />
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 text-white/20 font-bold">TK</div>
+                    </div>
+                    {amount && parseFloat(amount) < (activeTab === 'deposit' ? 100 : 500) && (
+                      <p className="text-[10px] text-rose-500 font-bold mt-2 ml-2 flex items-center gap-1">
+                        <AlertCircle size={10} />
+                        Minimum {activeTab} is ৳{activeTab === 'deposit' ? 100 : 500}
+                      </p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="text-[10px] uppercase tracking-widest text-white/40 font-bold ml-2">
-                    {activeTab === 'deposit' ? 'Your Number' : 'Withdrawal Number'}
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="01XXXXXXXXX"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:border-[#F27D26] transition-colors"
-                  />
-                </div>
-
-                {activeTab === 'deposit' && (
                   <div>
-                    <label className="text-[10px] uppercase tracking-widest text-white/40 font-bold ml-2">Transaction ID</label>
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black ml-2 mb-2 block">
+                      {activeTab === 'deposit' ? 'Your Sender Number' : 'Your Receiver Number'}
+                    </label>
                     <input
-                      type="text"
+                      type="tel"
                       required
-                      value={txId}
-                      onChange={(e) => setTxId(e.target.value)}
-                      placeholder="Enter TrxID"
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 focus:outline-none focus:border-[#F27D26] transition-colors"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full bg-black/40 border-2 border-white/5 rounded-2xl px-5 py-4 focus:outline-none focus:border-[#F27D26]/40 transition-all text-lg font-mono placeholder:text-white/10"
                     />
                   </div>
-                )}
+
+                  {activeTab === 'deposit' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                    >
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-black ml-2 mb-2 block">Transaction ID (TrxID)</label>
+                      <input
+                        type="text"
+                        required
+                        value={txId}
+                        onChange={(e) => setTxId(e.target.value)}
+                        placeholder="8XJ9K2L..."
+                        className="w-full bg-black/40 border-2 border-white/5 rounded-2xl px-5 py-4 focus:outline-none focus:border-[#F27D26]/40 transition-all text-lg font-mono placeholder:text-white/10 uppercase"
+                      />
+                    </motion.div>
+                  )}
+                </div>
               </div>
 
               {error && (
@@ -276,19 +367,60 @@ export const Wallet: React.FC = () => {
 
       {/* Transaction History */}
       <div className="mt-8 space-y-4">
-        <div className="flex items-center gap-2 px-2 text-white/60">
-          <History size={18} />
-          <h3 className="text-lg font-serif italic">Transaction History</h3>
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-2 text-white/60">
+            <History size={18} />
+            <h3 className="text-lg font-serif italic">Transaction History</h3>
+          </div>
         </div>
 
-        {history.length === 0 ? (
-          <div className="glass p-8 rounded-3xl text-center text-white/20 text-sm">
-            No transactions yet
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              {(['all', 'deposit', 'withdraw'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setHistoryFilter(f)}
+                  className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
+                    historyFilter === f ? 'bg-white/10 text-white border border-white/20' : 'text-white/40 hover:text-white/60'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+              <div className="w-px h-4 bg-white/10 self-center mx-1" />
+              {(['all', 'pending', 'approved', 'rejected'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all whitespace-nowrap ${
+                    statusFilter === s ? 'bg-white/10 text-white border border-white/20' : 'text-white/40 hover:text-white/60'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            
+            <div className="relative">
+              <History className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
+              <input 
+                type="text"
+                placeholder="Search by TrxID or Number..."
+                value={txSearch}
+                onChange={(e) => setTxSearch(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-[#F27D26]/40 transition-all placeholder:text-white/10"
+              />
+            </div>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {history.map((tx) => (
-              <div key={tx.id} className="glass p-4 rounded-2xl flex items-center justify-between border border-white/5">
+
+          {filteredHistory.length === 0 ? (
+            <div className="glass p-8 rounded-3xl text-center text-white/20 text-sm">
+              No matching transactions
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredHistory.map((tx) => (
+                <div key={tx.id} className="glass p-4 rounded-2xl flex items-center justify-between border border-white/5">
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                     tx.type === 'deposit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'

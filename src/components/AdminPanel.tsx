@@ -43,6 +43,7 @@ export const AdminPanel: React.FC = () => {
     number: 1
   });
   const [isSettling, setIsSettling] = useState(false);
+  const [isPreSetting, setIsPreSetting] = useState(false);
   const [paymentNumbers, setPaymentNumbers] = useState({
     bkash: '',
     nagad: '',
@@ -66,7 +67,14 @@ export const AdminPanel: React.FC = () => {
     const q = query(collection(db, 'games'), where('status', '==', 'active'), orderBy('startTime', 'desc'), limit(1));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
-        setActiveGame({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Game);
+        const game = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Game;
+        setActiveGame(game);
+        if (game.manualResultColor && game.manualResultNumber !== undefined) {
+          setManualResult({
+            color: game.manualResultColor,
+            number: game.manualResultNumber
+          });
+        }
       } else {
         setActiveGame(null);
       }
@@ -204,6 +212,24 @@ export const AdminPanel: React.FC = () => {
       alert('Failed to settle game');
     } finally {
       setIsSettling(false);
+    }
+  };
+
+  const handlePreSetResult = async () => {
+    if (!activeGame?.id || isPreSetting) return;
+    
+    setIsPreSetting(true);
+    try {
+      await updateDoc(doc(db, 'games', activeGame.id), {
+        manualResultColor: manualResult.color,
+        manualResultNumber: manualResult.number
+      });
+      alert('Result pre-set successfully! It will be used when the game settles.');
+    } catch (error) {
+      console.error('Failed to pre-set result', error);
+      alert('Failed to pre-set result');
+    } finally {
+      setIsPreSetting(false);
     }
   };
 
@@ -553,69 +579,92 @@ export const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* Manual Control */}
-            <div className="space-y-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Target size={18} className="text-[#F27D26]" />
-                <h4 className="text-sm font-bold uppercase tracking-widest text-white/60">Manual Result</h4>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-white/40 ml-2">Select Color</label>
-                  <div className="flex gap-2 mt-2">
-                    {(['green', 'red', 'violet'] as ColorSelection[]).map(color => (
-                      <button
-                        key={color}
-                        onClick={() => setManualResult(prev => ({ ...prev, color }))}
-                        className={`flex-1 py-3 rounded-xl border transition-all capitalize text-xs font-bold ${
-                          manualResult.color === color 
-                            ? 'bg-white/10 border-[#F27D26] text-white' 
-                            : 'bg-white/5 border-white/5 text-white/40'
-                        }`}
-                      >
-                        {color}
-                      </button>
-                    ))}
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Target size={18} className="text-[#F27D26]" />
+                    <h4 className="text-sm font-bold uppercase tracking-widest text-white/60">Manual Control</h4>
                   </div>
-                </div>
-
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-white/40 ml-2">Select Number</label>
-                  <div className="grid grid-cols-5 gap-2 mt-2">
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setManualResult(prev => ({ ...prev, number: i as NumberSelection }))}
-                        className={`py-2 rounded-lg border transition-all font-mono font-bold ${
-                          manualResult.number === i 
-                            ? 'bg-white/10 border-[#F27D26] text-white' 
-                            : 'bg-white/5 border-white/5 text-white/40'
-                        }`}
-                      >
-                        {i}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleManualSettle}
-                  disabled={isSettling}
-                  className="w-full btn-primary py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
-                >
-                  {isSettling ? (
-                    <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Check size={20} />
-                      <span>Set Result & Settle Game</span>
-                    </>
+                  {activeGame.manualResultColor && (
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20">
+                      <Save size={12} />
+                      <span>RESULT PRE-SET</span>
+                    </div>
                   )}
-                </button>
-                <p className="text-[10px] text-center text-white/20 italic">Warning: This will settle all pending bets for the current period immediately.</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-white/40 ml-2">Select Color</label>
+                    <div className="flex gap-2 mt-2">
+                      {(['green', 'red', 'violet'] as ColorSelection[]).map(color => (
+                        <button
+                          key={color}
+                          onClick={() => setManualResult(prev => ({ ...prev, color }))}
+                          className={`flex-1 py-3 rounded-xl border transition-all capitalize text-xs font-bold ${
+                            manualResult.color === color 
+                              ? 'bg-white/10 border-[#F27D26] text-white' 
+                              : 'bg-white/5 border-white/5 text-white/40'
+                          }`}
+                        >
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] uppercase font-bold text-white/40 ml-2">Select Number</label>
+                    <div className="grid grid-cols-5 gap-2 mt-2">
+                      {Array.from({ length: 10 }).map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setManualResult(prev => ({ ...prev, number: i as NumberSelection }))}
+                          className={`py-2 rounded-lg border transition-all font-mono font-bold ${
+                            manualResult.number === i 
+                              ? 'bg-white/10 border-[#F27D26] text-white' 
+                              : 'bg-white/5 border-white/5 text-white/40'
+                          }`}
+                        >
+                          {i}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <button
+                      onClick={handlePreSetResult}
+                      disabled={isPreSetting}
+                      className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl border border-white/10 flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+                    >
+                      {isPreSetting ? (
+                        <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <Save size={18} />
+                          <span className="text-xs font-bold uppercase tracking-wider">Pre-set Result</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleManualSettle}
+                      disabled={isSettling}
+                      className="flex-1 bg-[#F27D26] text-black py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-[0_0_15px_rgba(242,125,38,0.3)]"
+                    >
+                      {isSettling ? (
+                        <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <Check size={18} />
+                          <span className="text-xs font-bold uppercase tracking-wider">Settle Now</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-center text-white/20 italic">"Pre-set" saves the result for auto-settlement. "Settle Now" ends the game immediately.</p>
+                </div>
               </div>
-            </div>
           </div>
         )}
       </div>

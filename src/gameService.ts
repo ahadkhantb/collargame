@@ -46,18 +46,27 @@ export const gameService = {
   },
 
   async settleGame(gameId: string, manualResult?: { color: ColorSelection, number: NumberSelection }) {
-    const resultNumber = manualResult ? manualResult.number : Math.floor(Math.random() * 10) as NumberSelection;
+    const gameRef = doc(db, 'games', gameId);
+    const gameSnap = await getDoc(gameRef);
+    const gameData = gameSnap.data() as Game;
+
+    let resultNumber: NumberSelection;
     let resultColor: ColorSelection;
-    
+
     if (manualResult) {
+      resultNumber = manualResult.number;
       resultColor = manualResult.color;
+    } else if (gameData?.manualResultColor !== undefined && gameData?.manualResultNumber !== undefined) {
+      resultNumber = gameData.manualResultNumber;
+      resultColor = gameData.manualResultColor;
     } else {
+      resultNumber = Math.floor(Math.random() * 10) as NumberSelection;
       if ([1, 3, 7, 9].includes(resultNumber)) resultColor = 'green';
       else if ([2, 4, 6, 8].includes(resultNumber)) resultColor = 'red';
       else resultColor = 'violet'; // 0, 5
     }
 
-    await updateDoc(doc(db, 'games', gameId), {
+    await updateDoc(gameRef, {
       resultColor,
       resultNumber,
       status: 'completed'

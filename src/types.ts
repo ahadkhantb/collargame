@@ -49,6 +49,8 @@ export interface Game {
   periodId: string;
   resultColor?: ColorSelection;
   resultNumber?: NumberSelection;
+  manualResultColor?: ColorSelection;
+  manualResultNumber?: NumberSelection;
   startTime: string;
   endTime: string;
   status: 'active' | 'completed';

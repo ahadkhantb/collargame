@@ -22,6 +22,7 @@ export const GameBoard: React.FC = () => {
   const [soundEnabled, setSoundEnabled] = useState(soundService.isEnabled());
 
   const [userBets, setUserBets] = useState<Bet[]>([]);
+  const [betHistory, setBetHistory] = useState<Bet[]>([]);
   const [lastSuccessSelection, setLastSuccessSelection] = useState<BetSelection | null>(null);
 
   const toggleSound = () => {
@@ -111,6 +112,25 @@ export const GameBoard: React.FC = () => {
 
     return () => unsubscribe();
   }, [profile, currentGame]);
+
+  useEffect(() => {
+    if (!profile) return;
+
+    const q = query(
+      collection(db, 'bets'),
+      where('userId', '==', profile.uid),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setBetHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bet)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'bets');
+    });
+
+    return () => unsubscribe();
+  }, [profile]);
 
   useEffect(() => {
     if (!currentGame) return;
@@ -303,16 +323,23 @@ export const GameBoard: React.FC = () => {
       </div>
 
       {/* My Bets Section */}
-      {userBets.length > 0 && (
-        <div className="glass rounded-3xl p-8">
-          <div className="flex items-center gap-2 mb-6 text-white/60">
+      <div className="glass rounded-3xl p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2 text-white/60">
             <Trophy size={18} className="text-[#F27D26]" />
-            <h3 className="text-lg font-serif italic">My Bets (Current Period)</h3>
+            <h3 className="text-lg font-serif italic">My Betting History</h3>
           </div>
-          
+          <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Last 20 Bets</span>
+        </div>
+        
+        {betHistory.length === 0 ? (
+          <div className="py-12 text-center text-white/20 italic font-serif">
+            No bets placed yet.
+          </div>
+        ) : (
           <div className="space-y-3">
-            {userBets.map(bet => (
-              <div key={bet.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+            {betHistory.map(bet => (
+              <div key={bet.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all">
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
                     typeof bet.selection === 'string' 
@@ -323,8 +350,13 @@ export const GameBoard: React.FC = () => {
                     {bet.selection}
                   </div>
                   <div>
-                    <p className="text-sm font-bold">৳{bet.amount}</p>
-                    <p className="text-[10px] text-white/40 uppercase tracking-widest">Amount</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold">৳{bet.amount}</p>
+                      <span className="text-[8px] font-mono text-white/20">#{bet.gameId.slice(-6)}</span>
+                    </div>
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest">
+                      {new Date(bet.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
                   </div>
                 </div>
                 
@@ -337,14 +369,14 @@ export const GameBoard: React.FC = () => {
                     {bet.status}
                   </span>
                   {bet.status === 'won' && (
-                    <p className="text-xs font-bold text-emerald-500 mt-1">+৳{bet.payout}</p>
+                    <p className="text-xs font-bold text-emerald-500 mt-1">+৳{bet.payout.toFixed(2)}</p>
                   )}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Rules Section Toggle */}
       <div className="glass rounded-3xl overflow-hidden">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { addDoc, collection, doc, updateDoc, increment, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { addDoc, collection, doc, updateDoc, increment, query, where, orderBy, limit, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Transaction } from '../types';
@@ -17,6 +17,7 @@ export const Wallet: React.FC = () => {
   const [txId, setTxId] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
   const [history, setHistory] = useState<Transaction[]>([]);
 
   useEffect(() => {
@@ -42,12 +43,25 @@ export const Wallet: React.FC = () => {
     e.preventDefault();
     if (!profile) return;
     
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum < 100) {
+      setError('Minimum amount is ৳100');
+      return;
+    }
+
+    if (activeTab === 'withdraw' && profile.balance < amountNum) {
+      setError('Insufficient balance for withdrawal');
+      return;
+    }
+
     setLoading(true);
+    setError('');
+    
     try {
       const transaction: Omit<Transaction, 'id'> = {
         userId: profile.uid,
         type: activeTab,
-        amount: parseFloat(amount),
+        amount: amountNum,
         method,
         accountNumber,
         transactionId: activeTab === 'deposit' ? txId : undefined,
@@ -55,22 +69,19 @@ export const Wallet: React.FC = () => {
         createdAt: new Date().toISOString(),
       };
 
-      try {
-        await addDoc(collection(db, 'transactions'), transaction);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, 'transactions');
-      }
-      
+      const batch = writeBatch(db);
+      const txRef = doc(collection(db, 'transactions'));
+      batch.set(txRef, transaction);
+
       if (activeTab === 'withdraw') {
-        try {
-          await updateDoc(doc(db, 'users', profile.uid), {
-            balance: increment(-parseFloat(amount))
-          });
-        } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, `users/${profile.uid}`);
-        }
+        const userRef = doc(db, 'users', profile.uid);
+        batch.update(userRef, {
+          balance: increment(-amountNum)
+        });
       }
 
+      await batch.commit();
+      
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -78,8 +89,10 @@ export const Wallet: React.FC = () => {
         setAccountNumber('');
         setTxId('');
       }, 3000);
-    } catch (error) {
-      console.error('Transaction failed', error);
+    } catch (err) {
+      console.error('Transaction failed', err);
+      setError('Transaction failed. Please try again.');
+      handleFirestoreError(err, OperationType.WRITE, 'transactions');
     } finally {
       setLoading(false);
     }
@@ -217,6 +230,12 @@ export const Wallet: React.FC = () => {
                 )}
               </div>
 
+              {error && (
+                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-400 text-xs font-bold text-center">
+                  {error}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -265,6 +284,9 @@ export const Wallet: React.FC = () => {
                     <p className="text-[10px] text-white/40">
                       {new Date(tx.createdAt).toLocaleDateString()} • {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
+                    {tx.transactionId && (
+                      <p className="text-[10px] text-[#F27D26]/60 font-mono mt-1">ID: {tx.transactionId}</p>
+                    )}
                   </div>
                 </div>
                 

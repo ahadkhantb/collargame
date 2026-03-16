@@ -16,6 +16,16 @@ export const Profile: React.FC = () => {
   const [referralInput, setReferralInput] = useState('');
   const [referralError, setReferralError] = useState('');
   const [referralCount, setReferralCount] = useState(0);
+  const [prevEarnings, setPrevEarnings] = useState(profile?.referralEarnings || 0);
+  const [showEarningsPulse, setShowEarningsPulse] = useState(false);
+
+  React.useEffect(() => {
+    if (profile?.referralEarnings && profile.referralEarnings > prevEarnings) {
+      setShowEarningsPulse(true);
+      setTimeout(() => setShowEarningsPulse(false), 2000);
+      setPrevEarnings(profile.referralEarnings);
+    }
+  }, [profile?.referralEarnings, prevEarnings]);
 
   React.useEffect(() => {
     const fetchReferralStats = async () => {
@@ -34,8 +44,17 @@ export const Profile: React.FC = () => {
   if (!profile) return null;
 
   const handleApplyReferral = async () => {
-    if (!referralInput.trim()) return;
-    if (referralInput.trim().toUpperCase() === profile.referralCode) {
+    const code = referralInput.trim().toUpperCase();
+    if (!code) return;
+    
+    // Validation: Alphanumeric and exactly 6 characters (assuming standard length)
+    const referralRegex = /^[A-Z0-9]{6,10}$/;
+    if (!referralRegex.test(code)) {
+      setReferralError("Invalid code format. Use 6-10 alphanumeric characters.");
+      return;
+    }
+
+    if (code === profile.referralCode) {
       setReferralError("You cannot refer yourself.");
       return;
     }
@@ -207,7 +226,16 @@ export const Profile: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-white/40">Earned from Referrals</span>
-                    <span className="text-sm font-mono text-emerald-400">৳{(profile.referralEarnings || 0).toFixed(2)}</span>
+                    <motion.span 
+                      animate={showEarningsPulse ? { 
+                        scale: [1, 1.2, 1],
+                        color: ['#10b981', '#34d399', '#10b981'],
+                        textShadow: ['0 0 0px #10b981', '0 0 10px #10b981', '0 0 0px #10b981']
+                      } : {}}
+                      className="text-sm font-mono text-emerald-400"
+                    >
+                      ৳{(profile.referralEarnings || 0).toFixed(2)}
+                    </motion.span>
                   </div>
                 </div>
 

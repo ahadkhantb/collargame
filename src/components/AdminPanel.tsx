@@ -2,18 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, doc, updateDoc, increment, setDoc, getDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
-import { Transaction, UserProfile } from '../types';
+import { Transaction, UserProfile, Game, Bet, ColorSelection, NumberSelection } from '../types';
 import { gameService } from '../gameService';
 import { 
   Check, X, Clock, ShieldCheck, ArrowUpRight, ArrowDownLeft, 
   Settings as SettingsIcon, Save, Users as UsersIcon, 
   LayoutDashboard, Search, Wallet, TrendingUp, History,
-  User as UserIcon, Mail, Calendar, DollarSign
+  User as UserIcon, Mail, Calendar, DollarSign, Gamepad2,
+  BarChart3, Target, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../firestoreError';
 
-type AdminTab = 'overview' | 'users' | 'transactions' | 'settings';
+type AdminTab = 'overview' | 'users' | 'transactions' | 'game' | 'settings';
 
 export const AdminPanel: React.FC = () => {
   const { profile } = useAuth();
@@ -23,6 +24,8 @@ export const AdminPanel: React.FC = () => {
   const [pendingTransactions, setPendingTransactions] = useState<Transaction[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [activeGame, setActiveGame] = useState<Game | null>(null);
+  const [activeBets, setActiveBets] = useState<Bet[]>([]);
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalBalance: 0,
@@ -35,6 +38,11 @@ export const AdminPanel: React.FC = () => {
   // UI States
   const [userSearch, setUserSearch] = useState('');
   const [txFilter, setTxFilter] = useState<'pending' | 'history'>('pending');
+  const [manualResult, setManualResult] = useState<{ color: ColorSelection, number: NumberSelection }>({
+    color: 'green',
+    number: 1
+  });
+  const [isSettling, setIsSettling] = useState(false);
   const [paymentNumbers, setPaymentNumbers] = useState({
     bkash: '',
     nagad: '',
@@ -52,6 +60,32 @@ export const AdminPanel: React.FC = () => {
     };
     fetchSettings();
   }, []);
+
+  // Fetch Active Game
+  useEffect(() => {
+    const q = query(collection(db, 'games'), where('status', '==', 'active'), orderBy('startTime', 'desc'), limit(1));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        setActiveGame({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Game);
+      } else {
+        setActiveGame(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch Bets for Active Game
+  useEffect(() => {
+    if (!activeGame?.id) {
+      setActiveBets([]);
+      return;
+    }
+    const q = query(collection(db, 'bets'), where('gameId', '==', activeGame.id));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setActiveBets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bet)));
+    });
+    return () => unsubscribe();
+  }, [activeGame?.id]);
 
   // Fetch Pending Transactions
   useEffect(() => {
@@ -157,11 +191,48 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const handleManualSettle = async () => {
+    if (!activeGame?.id || isSettling) return;
+    if (!window.confirm(`Are you sure you want to settle period ${activeGame.periodId} with result ${manualResult.color.toUpperCase()} - ${manualResult.number}?`)) return;
+
+    setIsSettling(true);
+    try {
+      await gameService.settleGame(activeGame.id, manualResult);
+      alert('Game settled successfully!');
+    } catch (error) {
+      console.error('Failed to settle game', error);
+      alert('Failed to settle game');
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
   const filteredUsers = users.filter(u => 
     u.email.toLowerCase().includes(userSearch.toLowerCase()) || 
     u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
     u.uid.toLowerCase().includes(userSearch.toLowerCase())
   );
+
+  const getBetTotals = () => {
+    const totals = {
+      green: 0,
+      red: 0,
+      violet: 0,
+      numbers: Array(10).fill(0)
+    };
+
+    activeBets.forEach(bet => {
+      if (typeof bet.selection === 'number') {
+        totals.numbers[bet.selection] += bet.amount;
+      } else {
+        totals[bet.selection as ColorSelection] += bet.amount;
+      }
+    });
+
+    return totals;
+  };
+
+  const betTotals = getBetTotals();
 
   const renderOverview = () => (
     <div className="space-y-6">
@@ -234,15 +305,15 @@ export const AdminPanel: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => setActiveTab('users')}
+            onClick={() => setActiveTab('game')}
             className="p-4 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/5 transition-all flex items-center gap-4 group"
           >
-            <div className="w-12 h-12 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-              <UsersIcon size={24} />
+            <div className="w-12 h-12 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Gamepad2 size={24} />
             </div>
             <div className="text-left">
-              <p className="font-bold">Manage Users</p>
-              <p className="text-[10px] text-white/40 uppercase tracking-widest">View and search user database</p>
+              <p className="font-bold">Game Control</p>
+              <p className="text-[10px] text-white/40 uppercase tracking-widest">Set results and analyze bets</p>
             </div>
           </button>
         </div>
@@ -414,6 +485,143 @@ export const AdminPanel: React.FC = () => {
     </div>
   );
 
+  const renderGameControl = () => (
+    <div className="space-y-8">
+      <div className="glass p-8 rounded-3xl border border-white/5">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center">
+              <Gamepad2 size={20} />
+            </div>
+            <div>
+              <h3 className="text-xl font-serif italic">Active Game</h3>
+              <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Period: {activeGame?.periodId || 'None'}</p>
+            </div>
+          </div>
+          {activeGame && (
+            <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full border border-emerald-500/20">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Live</span>
+            </div>
+          )}
+        </div>
+
+        {!activeGame ? (
+          <div className="text-center py-10">
+            <AlertCircle className="mx-auto text-white/10 mb-4" size={48} />
+            <p className="text-white/40 font-serif italic">No active game found. It will auto-generate on next user visit.</p>
+          </div>
+        ) : (
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Bet Analysis */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart3 size={18} className="text-[#F27D26]" />
+                <h4 className="text-sm font-bold uppercase tracking-widest text-white/60">Bet Analysis</h4>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl text-center">
+                  <p className="text-[8px] uppercase font-bold text-emerald-500 mb-1">Green</p>
+                  <p className="text-lg font-mono font-bold">৳{betTotals.green}</p>
+                </div>
+                <div className="bg-rose-500/5 border border-rose-500/10 p-4 rounded-2xl text-center">
+                  <p className="text-[8px] uppercase font-bold text-rose-500 mb-1">Red</p>
+                  <p className="text-lg font-mono font-bold">৳{betTotals.red}</p>
+                </div>
+                <div className="bg-purple-500/5 border border-purple-500/10 p-4 rounded-2xl text-center">
+                  <p className="text-[8px] uppercase font-bold text-purple-500 mb-1">Violet</p>
+                  <p className="text-lg font-mono font-bold">৳{betTotals.violet}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-5 gap-2">
+                {betTotals.numbers.map((amount, num) => (
+                  <div key={num} className="bg-white/5 border border-white/10 p-2 rounded-xl text-center">
+                    <p className="text-[8px] font-bold text-white/40 mb-1">{num}</p>
+                    <p className="text-xs font-mono font-bold">৳{amount}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp size={14} className="text-amber-500" />
+                  <span className="text-[10px] font-bold uppercase text-amber-500">Total Pool</span>
+                </div>
+                <p className="text-2xl font-mono font-bold">৳{activeBets.reduce((acc, b) => acc + b.amount, 0).toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Manual Control */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Target size={18} className="text-[#F27D26]" />
+                <h4 className="text-sm font-bold uppercase tracking-widest text-white/60">Manual Result</h4>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-white/40 ml-2">Select Color</label>
+                  <div className="flex gap-2 mt-2">
+                    {(['green', 'red', 'violet'] as ColorSelection[]).map(color => (
+                      <button
+                        key={color}
+                        onClick={() => setManualResult(prev => ({ ...prev, color }))}
+                        className={`flex-1 py-3 rounded-xl border transition-all capitalize text-xs font-bold ${
+                          manualResult.color === color 
+                            ? 'bg-white/10 border-[#F27D26] text-white' 
+                            : 'bg-white/5 border-white/5 text-white/40'
+                        }`}
+                      >
+                        {color}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-white/40 ml-2">Select Number</label>
+                  <div className="grid grid-cols-5 gap-2 mt-2">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setManualResult(prev => ({ ...prev, number: i as NumberSelection }))}
+                        className={`py-2 rounded-lg border transition-all font-mono font-bold ${
+                          manualResult.number === i 
+                            ? 'bg-white/10 border-[#F27D26] text-white' 
+                            : 'bg-white/5 border-white/5 text-white/40'
+                        }`}
+                      >
+                        {i}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleManualSettle}
+                  disabled={isSettling}
+                  className="w-full btn-primary py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
+                >
+                  {isSettling ? (
+                    <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check size={20} />
+                      <span>Set Result & Settle Game</span>
+                    </>
+                  )}
+                </button>
+                <p className="text-[10px] text-center text-white/20 italic">Warning: This will settle all pending bets for the current period immediately.</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-8 pb-20">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -432,6 +640,7 @@ export const AdminPanel: React.FC = () => {
             { id: 'overview', label: 'Overview', icon: LayoutDashboard },
             { id: 'users', label: 'Users', icon: UsersIcon },
             { id: 'transactions', label: 'Transactions', icon: DollarSign },
+            { id: 'game', label: 'Game', icon: Gamepad2 },
             { id: 'settings', label: 'Settings', icon: SettingsIcon },
           ].map(tab => (
             <button 
@@ -459,6 +668,7 @@ export const AdminPanel: React.FC = () => {
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'users' && renderUsers()}
           {activeTab === 'transactions' && renderTransactions()}
+          {activeTab === 'game' && renderGameControl()}
           {activeTab === 'settings' && (
             <div className="glass p-8 rounded-3xl border border-white/5">
               <div className="flex items-center gap-3 mb-8">

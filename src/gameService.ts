@@ -45,12 +45,17 @@ export const gameService = {
     return latestGame;
   },
 
-  async settleGame(gameId: string) {
-    const resultNumber = Math.floor(Math.random() * 10) as NumberSelection;
-    let resultColor: ColorSelection = 'green';
-    if ([1, 3, 7, 9].includes(resultNumber)) resultColor = 'green';
-    else if ([2, 4, 6, 8].includes(resultNumber)) resultColor = 'red';
-    else if ([0, 5].includes(resultNumber)) resultColor = 'violet';
+  async settleGame(gameId: string, manualResult?: { color: ColorSelection, number: NumberSelection }) {
+    const resultNumber = manualResult ? manualResult.number : Math.floor(Math.random() * 10) as NumberSelection;
+    let resultColor: ColorSelection;
+    
+    if (manualResult) {
+      resultColor = manualResult.color;
+    } else {
+      if ([1, 3, 7, 9].includes(resultNumber)) resultColor = 'green';
+      else if ([2, 4, 6, 8].includes(resultNumber)) resultColor = 'red';
+      else resultColor = 'violet'; // 0, 5
+    }
 
     await updateDoc(doc(db, 'games', gameId), {
       resultColor,

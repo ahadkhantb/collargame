@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { addDoc, collection, doc, updateDoc, increment, query, where, orderBy, limit, onSnapshot, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, doc, updateDoc, increment, query, where, orderBy, limit, onSnapshot, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Transaction } from '../types';
@@ -19,6 +19,25 @@ export const Wallet: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [history, setHistory] = useState<Transaction[]>([]);
+  const [paymentNumbers, setPaymentNumbers] = useState({
+    bkash: '017XXXXXXXX',
+    nagad: '018XXXXXXXX',
+    rocket: '019XXXXXXXX'
+  });
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settingsDoc = await getDoc(doc(db, 'settings', 'payment'));
+        if (settingsDoc.exists()) {
+          setPaymentNumbers(settingsDoc.data() as any);
+        }
+      } catch (err) {
+        console.error('Failed to fetch payment settings', err);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     if (!profile) return;
@@ -99,9 +118,9 @@ export const Wallet: React.FC = () => {
   };
 
   const methods = [
-    { id: 'bkash', name: 'bKash', color: '#D12053', number: '017XXXXXXXX' },
-    { id: 'nagad', name: 'Nagad', color: '#F7941D', number: '018XXXXXXXX' },
-    { id: 'rocket', name: 'Rocket', color: '#8C3494', number: '019XXXXXXXX' },
+    { id: 'bkash', name: 'bKash', color: '#D12053', number: paymentNumbers.bkash },
+    { id: 'nagad', name: 'Nagad', color: '#F7941D', number: paymentNumbers.nagad },
+    { id: 'rocket', name: 'Rocket', color: '#8C3494', number: paymentNumbers.rocket },
   ] as const;
 
   return (

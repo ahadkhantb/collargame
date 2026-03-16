@@ -58,6 +58,16 @@
         "status": { "type": "string", "enum": ["active", "completed"] }
       },
       "required": ["periodId", "status"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings",
+      "type": "object",
+      "properties": {
+        "bkash": { "type": "string" },
+        "nagad": { "type": "string" },
+        "rocket": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -76,6 +86,10 @@
     "games/{gameId}": {
       "schema": "Game",
       "description": "Game history and current state"
+    },
+    "settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Global app settings"
     }
   }
 }

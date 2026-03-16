@@ -59,6 +59,12 @@ service cloud.firestore {
       allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
 
+    // Settings Rules
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Test Connection Rule
     match /test/connection {
       allow read: if true;

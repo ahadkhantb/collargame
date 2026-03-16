@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, doc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../AuthContext';
 import { Transaction } from '../types';
 import { gameService } from '../gameService';
 import { Check, X, Clock, ShieldCheck, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
@@ -8,6 +9,7 @@ import { motion } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../firestoreError';
 
 export const AdminPanel: React.FC = () => {
+  const { profile } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   useEffect(() => {
@@ -21,16 +23,18 @@ export const AdminPanel: React.FC = () => {
   }, []);
 
   const handleApprove = async (id: string) => {
+    if (!profile) return;
     try {
-      await gameService.approveTransaction(id);
+      await gameService.approveTransaction(id, profile.uid, profile.email);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `transactions/${id}`);
     }
   };
 
   const handleReject = async (id: string) => {
+    if (!profile) return;
     try {
-      await gameService.rejectTransaction(id);
+      await gameService.rejectTransaction(id, profile.uid, profile.email);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `transactions/${id}`);
     }

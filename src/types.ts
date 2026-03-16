@@ -36,6 +36,12 @@ export interface Transaction {
   transactionId?: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
+  approvedBy?: string;
+  approvedByEmail?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedByEmail?: string;
+  rejectedAt?: string;
 }
 
 export interface Game {

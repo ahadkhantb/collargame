@@ -97,7 +97,7 @@ export const gameService = {
     await batch.commit();
   },
 
-  async approveTransaction(transactionId: string) {
+  async approveTransaction(transactionId: string, adminId: string, adminEmail: string) {
     const txRef = doc(db, 'transactions', transactionId);
     const txSnap = await getDoc(txRef);
     if (!txSnap.exists()) return;
@@ -106,7 +106,12 @@ export const gameService = {
     if (tx.status !== 'pending') return;
 
     const batch = writeBatch(db);
-    batch.update(txRef, { status: 'approved' });
+    batch.update(txRef, { 
+      status: 'approved',
+      approvedBy: adminId,
+      approvedByEmail: adminEmail,
+      approvedAt: new Date().toISOString()
+    });
 
     const userRef = doc(db, 'users', tx.userId);
     const userSnap = await getDoc(userRef);
@@ -128,18 +133,12 @@ export const gameService = {
           });
         }
       }
-    } else {
-      // Withdrawal balance is usually deducted at request time, 
-      // but if not, we'd handle it here. 
-      // In my Wallet.tsx, I didn't deduct withdrawal balance yet.
-      // Let's assume we deduct it on approval for simplicity or on request.
-      // Actually, standard practice is to deduct on request and refund on reject.
     }
 
     await batch.commit();
   },
 
-  async rejectTransaction(transactionId: string) {
+  async rejectTransaction(transactionId: string, adminId: string, adminEmail: string) {
     const txRef = doc(db, 'transactions', transactionId);
     const txSnap = await getDoc(txRef);
     if (!txSnap.exists()) return;
@@ -148,7 +147,12 @@ export const gameService = {
     if (tx.status !== 'pending') return;
 
     const batch = writeBatch(db);
-    batch.update(txRef, { status: 'rejected' });
+    batch.update(txRef, { 
+      status: 'rejected',
+      rejectedBy: adminId,
+      rejectedByEmail: adminEmail,
+      rejectedAt: new Date().toISOString()
+    });
 
     if (tx.type === 'withdraw') {
       const userRef = doc(db, 'users', tx.userId);

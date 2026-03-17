@@ -23,6 +23,8 @@ export interface Bet {
   selection: BetSelection;
   status: 'pending' | 'won' | 'lost';
   payout: number;
+  resultColor?: ColorSelection;
+  resultNumber?: NumberSelection;
   createdAt: string;
 }
 

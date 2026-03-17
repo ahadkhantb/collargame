@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Game, Bet, ColorSelection, NumberSelection, BetSelection } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clock, History, Trophy, HelpCircle, ChevronDown, ChevronUp, Volume2, VolumeX, Search, X as CloseIcon } from 'lucide-react';
+import { Clock, History, Trophy, HelpCircle, ChevronDown, ChevronUp, Volume2, VolumeX, Search, X as CloseIcon, ArrowRight } from 'lucide-react';
 import { gameService } from '../gameService';
 import { GameRules } from './GameRules';
 import { soundService } from '../soundService';
@@ -29,6 +29,8 @@ export const GameBoard: React.FC = () => {
   
   const [statusFilter, setStatusFilter] = useState<'all' | 'won' | 'lost' | 'pending'>('all');
   const [periodSearch, setPeriodSearch] = useState('');
+  const [bottomTab, setBottomTab] = useState<'results' | 'bets'>('results');
+  const [historyLimit, setHistoryLimit] = useState(20);
 
   const filteredBetHistory = useMemo(() => {
     return betHistory.filter(bet => {
@@ -138,7 +140,7 @@ export const GameBoard: React.FC = () => {
       collection(db, 'bets'),
       where('userId', '==', profile.uid),
       orderBy('createdAt', 'desc'),
-      limit(20)
+      limit(historyLimit)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -376,99 +378,199 @@ export const GameBoard: React.FC = () => {
         )}
       </div>
 
-      {/* My Bets Section */}
-      <div className="glass rounded-3xl p-8">
-        <div className="flex flex-col gap-6 mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-white/60">
-              <Trophy size={18} className="text-[#F27D26]" />
-              <h3 className="text-lg font-serif italic">My Betting History</h3>
-            </div>
-            <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Last 20 Bets</span>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex gap-2 p-1 bg-black/40 rounded-xl border border-white/5 w-fit">
-              {(['all', 'won', 'lost', 'pending'] as const).map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
-                    statusFilter === status 
-                      ? 'bg-[#F27D26] text-black shadow-lg shadow-[#F27D26]/20' 
-                      : 'text-white/40 hover:text-white/60'
-                  }`}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
-              <input 
-                type="text"
-                placeholder="Search Period ID..."
-                value={periodSearch}
-                onChange={(e) => setPeriodSearch(e.target.value)}
-                className="w-full bg-black/40 border border-white/5 rounded-xl py-2 pl-10 pr-10 text-xs focus:outline-none focus:border-[#F27D26]/40 transition-all placeholder:text-white/10"
-              />
-              {periodSearch && (
-                <button 
-                  onClick={() => setPeriodSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/40"
-                >
-                  <CloseIcon size={14} />
-                </button>
-              )}
-            </div>
-          </div>
+      {/* Bottom Tabs Section */}
+      <div className="glass rounded-[32px] overflow-hidden border border-white/5">
+        <div className="flex p-2 bg-black/40 border-b border-white/5">
+          <button
+            onClick={() => setBottomTab('results')}
+            className={`flex-1 py-4 rounded-2xl text-xs font-bold uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
+              bottomTab === 'results' ? 'bg-white/10 text-white shadow-inner' : 'text-white/40 hover:text-white/60'
+            }`}
+          >
+            <History size={16} />
+            Recent Results
+          </button>
+          <button
+            onClick={() => setBottomTab('bets')}
+            className={`flex-1 py-4 rounded-2xl text-xs font-bold uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
+              bottomTab === 'bets' ? 'bg-white/10 text-white shadow-inner' : 'text-white/40 hover:text-white/60'
+            }`}
+          >
+            <Trophy size={16} />
+            My Bets
+          </button>
         </div>
-        
-        {filteredBetHistory.length === 0 ? (
-          <div className="py-12 text-center text-white/20 italic font-serif">
-            {betHistory.length === 0 ? 'No bets placed yet.' : 'No matches found for current filters.'}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredBetHistory.map(bet => (
-              <div key={bet.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all">
-                <div className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
-                    typeof bet.selection === 'string' 
-                      ? (bet.selection === 'green' ? 'bg-emerald-500 text-black' : 
-                         bet.selection === 'red' ? 'bg-rose-500 text-black' : 'bg-violet-500 text-white')
-                      : 'bg-white/10 text-white border border-white/10'
-                  }`}>
-                    {bet.selection}
+
+        <div className="p-6">
+          <AnimatePresence mode="wait">
+            {bottomTab === 'results' ? (
+              <motion.div
+                key="results"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-white/20">Trend Visualization</p>
+                  <div className="flex gap-1">
+                    {history.slice(0, 15).reverse().map((game, i) => (
+                      <div 
+                        key={i}
+                        className={`w-2.5 h-2.5 rounded-full shadow-sm ${
+                          game.resultColor === 'green' ? 'bg-emerald-500' : 
+                          game.resultColor === 'red' ? 'bg-rose-500' : 'bg-violet-500'
+                        }`}
+                      />
+                    ))}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold">৳{bet.amount}</p>
-                      <span className="text-[8px] font-mono text-white/20">#{bet.gameId.slice(-6)}</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {history.map(game => (
+                    <div key={game.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/[0.07] transition-colors">
+                      <div className="flex flex-col">
+                        <span className="text-[8px] font-black text-white/20 uppercase tracking-tighter">Period</span>
+                        <span className="text-xs font-mono font-bold text-white/80">{game.periodId}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-serif italic shadow-lg ${
+                          game.resultColor === 'green' ? 'bg-emerald-500 text-black' : 
+                          game.resultColor === 'red' ? 'bg-rose-500 text-black' : 'bg-violet-500 text-white'
+                        }`}>
+                          {game.resultNumber}
+                        </div>
+                        <div className="text-right min-w-[60px]">
+                          <p className="text-[10px] font-black uppercase tracking-widest opacity-40 capitalize">{game.resultColor}</p>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[10px] text-white/40 uppercase tracking-widest">
-                      {new Date(bet.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                  ))}
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="bets"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-6"
+              >
+                <div className="flex flex-col gap-4">
+                  <div className="flex gap-2 p-1 bg-black/40 rounded-xl border border-white/5 w-fit">
+                    {(['all', 'won', 'lost', 'pending'] as const).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => setStatusFilter(status)}
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all ${
+                          statusFilter === status 
+                            ? 'bg-[#F27D26] text-black shadow-lg shadow-[#F27D26]/20' 
+                            : 'text-white/40 hover:text-white/60'
+                        }`}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" />
+                    <input 
+                      type="text"
+                      placeholder="Search Period ID..."
+                      value={periodSearch}
+                      onChange={(e) => setPeriodSearch(e.target.value)}
+                      className="w-full bg-black/40 border border-white/5 rounded-xl py-2.5 pl-10 pr-10 text-xs focus:outline-none focus:border-[#F27D26]/40 transition-all placeholder:text-white/10"
+                    />
+                    {periodSearch && (
+                      <button 
+                        onClick={() => setPeriodSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white/40"
+                      >
+                        <CloseIcon size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
-                
-                <div className="text-right">
-                  <span className={`text-[10px] uppercase font-bold px-3 py-1 rounded-full border ${
-                    bet.status === 'won' ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/20' :
-                    bet.status === 'lost' ? 'bg-rose-500/20 text-rose-500 border-rose-500/20' :
-                    'bg-amber-500/20 text-amber-500 border-amber-500/20'
-                  }`}>
-                    {bet.status}
-                  </span>
-                  {bet.status === 'won' && (
-                    <p className="text-xs font-bold text-emerald-500 mt-1">+৳{bet.payout.toFixed(2)}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+
+                {filteredBetHistory.length === 0 ? (
+                  <div className="py-12 text-center text-white/20 italic font-serif">
+                    {betHistory.length === 0 ? 'No bets placed yet.' : 'No matches found for current filters.'}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredBetHistory.map(bet => (
+                      <div key={bet.id} className="flex flex-col p-4 bg-white/5 rounded-2xl border border-white/5 hover:border-white/10 transition-all gap-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-md ${
+                              typeof bet.selection === 'string' 
+                                ? (bet.selection === 'green' ? 'bg-emerald-500 text-black' : 
+                                   bet.selection === 'red' ? 'bg-rose-500 text-black' : 'bg-violet-500 text-white')
+                                : 'bg-white/10 text-white border border-white/10'
+                            }`}>
+                              {bet.selection}
+                            </div>
+                            
+                            {bet.status !== 'pending' && (
+                              <>
+                                <ArrowRight size={14} className="text-white/20" />
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-serif italic text-sm shadow-lg ${
+                                  bet.resultColor === 'green' ? 'bg-emerald-500 text-black' : 
+                                  bet.resultColor === 'red' ? 'bg-rose-500 text-black' : 'bg-violet-500 text-white'
+                                }`}>
+                                  {bet.resultNumber}
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="text-right">
+                            <span className={`text-[10px] uppercase font-black px-3 py-1 rounded-full border ${
+                              bet.status === 'won' ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/20' :
+                              bet.status === 'lost' ? 'bg-rose-500/20 text-rose-500 border-rose-500/20' :
+                              'bg-amber-500/20 text-amber-500 border-amber-500/20'
+                            }`}>
+                              {bet.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold text-white/90">৳{bet.amount}</p>
+                              <span className="text-[9px] font-mono text-white/20">#{bet.gameId.slice(-8)}</span>
+                            </div>
+                            <p className="text-[9px] text-white/30 uppercase font-bold tracking-tighter">
+                              {new Date(bet.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          
+                          {bet.status === 'won' && (
+                            <div className="text-right">
+                              <p className="text-[8px] uppercase font-black text-emerald-500/40">Payout</p>
+                              <p className="text-sm font-black text-emerald-500">+৳{bet.payout.toFixed(2)}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {betHistory.length >= historyLimit && (
+                      <button 
+                        onClick={() => setHistoryLimit(prev => prev + 20)}
+                        className="w-full py-4 text-[10px] uppercase font-black tracking-[0.2em] text-white/20 hover:text-white/40 transition-colors"
+                      >
+                        Load More History
+                      </button>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Rules Section Toggle */}
@@ -508,46 +610,8 @@ export const GameBoard: React.FC = () => {
           )}
         </AnimatePresence>
       </div>
-
-      {/* History Section */}
-      <div className="glass rounded-3xl p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2 text-white/60">
-            <History size={18} />
-            <h3 className="text-lg font-serif italic">Recent Results</h3>
-          </div>
-          <div className="flex gap-1">
-            {history.slice(0, 10).reverse().map((game, i) => (
-              <div 
-                key={i}
-                className={`w-2 h-2 rounded-full ${
-                  game.resultColor === 'green' ? 'bg-emerald-500' : 
-                  game.resultColor === 'red' ? 'bg-rose-500' : 'bg-violet-500'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-        
-        <div className="space-y-4">
-          {history.map(game => (
-            <div key={game.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
-              <div className="flex flex-col">
-                <span className="text-[10px] font-mono text-white/20 uppercase">Period</span>
-                <span className="text-sm font-bold">{game.periodId}</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-serif ${
-                  game.resultColor === 'green' ? 'bg-emerald-500' : 
-                  game.resultColor === 'red' ? 'bg-rose-500' : 'bg-violet-500'
-                }`}>
-                  {game.resultNumber}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };
+
+export default GameBoard;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { collection, query, where, onSnapshot, doc, updateDoc, increment, setDoc, getDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../AuthContext';
@@ -9,12 +9,12 @@ import {
   Settings as SettingsIcon, Save, Users as UsersIcon, 
   LayoutDashboard, Search, Wallet, TrendingUp, History,
   User as UserIcon, Mail, Calendar, DollarSign, Gamepad2,
-  BarChart3, Target, AlertCircle
+  BarChart3, Target, AlertCircle, Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { handleFirestoreError, OperationType } from '../firestoreError';
 
-type AdminTab = 'overview' | 'users' | 'transactions' | 'game' | 'settings';
+type AdminTab = 'overview' | 'users' | 'transactions' | 'game' | 'settings' | 'referrals';
 
 export const AdminPanel: React.FC = () => {
   const { profile } = useAuth();
@@ -37,6 +37,7 @@ export const AdminPanel: React.FC = () => {
 
   // UI States
   const [userSearch, setUserSearch] = useState('');
+  const [referralSearch, setReferralSearch] = useState('');
   const [txFilter, setTxFilter] = useState<'pending' | 'history'>('pending');
   const [manualResult, setManualResult] = useState<{ color: ColorSelection, number: NumberSelection }>({
     color: 'green',
@@ -50,6 +51,16 @@ export const AdminPanel: React.FC = () => {
     rocket: ''
   });
   const [savingSettings, setSavingSettings] = useState(false);
+
+  const referralCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    users.forEach(u => {
+      if (u.referredBy) {
+        counts[u.referredBy] = (counts[u.referredBy] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [users]);
 
   // Fetch Settings
   useEffect(() => {
@@ -260,6 +271,76 @@ export const AdminPanel: React.FC = () => {
 
   const betTotals = getBetTotals();
 
+  const renderReferrals = () => {
+    const filteredReferralUsers = users.filter(u => 
+      u.email.toLowerCase().includes(referralSearch.toLowerCase()) || 
+      u.displayName?.toLowerCase().includes(referralSearch.toLowerCase()) ||
+      u.uid.toLowerCase().includes(referralSearch.toLowerCase())
+    ).sort((a, b) => (referralCounts[b.uid] || 0) - (referralCounts[a.uid] || 0));
+
+    return (
+      <div className="space-y-6">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={20} />
+          <input 
+            type="text"
+            placeholder="Search users by email or name..."
+            value={referralSearch}
+            onChange={(e) => setReferralSearch(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 focus:outline-none focus:border-[#F27D26] transition-colors"
+          />
+        </div>
+
+        <div className="grid gap-4">
+          {filteredReferralUsers.map((user, index) => (
+            <motion.div 
+              key={user.uid}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="glass p-6 rounded-3xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-6"
+            >
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                <div className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10">
+                  <Share2 size={24} className="text-[#F27D26]" />
+                </div>
+                <div>
+                  <h4 className="font-bold">{user.displayName || 'Anonymous User'}</h4>
+                  <div className="flex items-center gap-2 text-white/40 text-[10px] font-mono">
+                    <Mail size={10} />
+                    <span>{user.email}</span>
+                  </div>
+                  <div className="mt-1 flex gap-2">
+                    <span className="text-[8px] uppercase font-bold px-2 py-0.5 rounded bg-white/5 text-white/40">
+                      Code: {user.referralCode || 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-8 w-full sm:w-auto justify-between sm:justify-end">
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Total Referrals</p>
+                  <div className="flex items-center justify-end gap-2">
+                    <UsersIcon size={14} className="text-blue-500" />
+                    <p className="text-xl font-mono font-bold text-blue-500">{referralCounts[user.uid] || 0}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Total Earnings</p>
+                  <div className="flex items-center justify-end gap-2">
+                    <DollarSign size={14} className="text-emerald-500" />
+                    <p className="text-xl font-mono font-bold text-emerald-500">৳{user.referralEarnings?.toFixed(2) || '0.00'}</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderOverview = () => (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
@@ -400,7 +481,10 @@ export const AdminPanel: React.FC = () => {
               </div>
               <div className="text-right">
                 <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">Referrals</p>
-                <p className="text-xl font-mono font-bold text-[#F27D26]">{user.referralEarnings ? `৳${user.referralEarnings.toFixed(2)}` : '৳0.00'}</p>
+                <div className="flex items-center justify-end gap-2">
+                  <span className="text-[10px] font-bold text-blue-500">({referralCounts[user.uid] || 0})</span>
+                  <p className="text-xl font-mono font-bold text-[#F27D26]">{user.referralEarnings ? `৳${user.referralEarnings.toFixed(2)}` : '৳0.00'}</p>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -700,6 +784,7 @@ export const AdminPanel: React.FC = () => {
           {[
             { id: 'overview', label: 'Overview', icon: LayoutDashboard },
             { id: 'users', label: 'Users', icon: UsersIcon },
+            { id: 'referrals', label: 'Referrals', icon: Share2 },
             { id: 'transactions', label: 'Transactions', icon: DollarSign },
             { id: 'game', label: 'Game', icon: Gamepad2 },
             { id: 'settings', label: 'Settings', icon: SettingsIcon },
@@ -728,6 +813,7 @@ export const AdminPanel: React.FC = () => {
         >
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'users' && renderUsers()}
+          {activeTab === 'referrals' && renderReferrals()}
           {activeTab === 'transactions' && renderTransactions()}
           {activeTab === 'game' && renderGameControl()}
           {activeTab === 'settings' && (

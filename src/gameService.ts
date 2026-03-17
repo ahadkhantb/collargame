@@ -98,7 +98,9 @@ export const gameService = {
       const payout = won ? bet.amount * multiplier : 0;
       batch.update(doc(db, 'bets', bet.id!), {
         status: won ? 'won' : 'lost',
-        payout
+        payout,
+        resultColor,
+        resultNumber
       });
 
       if (won) {
